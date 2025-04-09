@@ -1,0 +1,195 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple WebSocket Chat</title>
+    <style>
+        body {
+            margin: 0;
+            padding-bottom: 3rem; 
+            font-family: sans-serif;
+        }
+
+        #messageArea{
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #form {
+            background: rgba(0, 0, 0, 0.15); 
+            padding: 0.25rem; 
+            /*position: fixed;
+            bottom: 0; left: 0; right: 0;*/
+            display: flex; 
+            height: 3rem; 
+            margin: 0 1rem;
+            border-radius: .5rem;
+            box-sizing: border-box; 
+            backdrop-filter: blur(10px); }
+
+        #input { 
+            border: none; 
+            padding: 0 1rem; 
+            flex-grow: 1; 
+            border-radius: 2rem; 
+            margin: 0.25rem; }
+
+        #input:focus { 
+            outline: none; }
+
+        #form > button {
+            background: #333;
+            border: none;
+            padding: 0 1rem;
+            margin: 0.25rem;
+            border-radius: 3rem;
+            outline: none;
+            color: #fff; }
+
+        #typingText{
+            font-size: .8rem;
+            color: #333;
+            margin: 0;
+            padding: 0 .5rem 0.3rem 1.5rem; 
+            height: 1rem;
+            background: #fff;
+        }
+
+        #messages { 
+            list-style-type: none;
+            margin: 0 1rem; padding: 0; }
+        #messages > li { 
+            padding: 0.5rem 1rem; }
+        #messages > li:nth-child(odd) {
+            background: #efefef; }
+
+    </style>
+</head>
+<body>
+
+    <ul id="messages"></ul>
+    
+    <div id="messageArea">
+        <form id="form" action="">
+            <input id="input" autocomplete="off" placeholder="Message"/>
+            <button>Send</button>
+        </form>
+
+        <p id="typingText"></p>
+    </div>
+
+    <!-- Include the Socket.IO client library -->
+    <script src="/socket.io/socket.io.js"></script>
+
+
+    <script>
+        function setUsername(){
+            let username = prompt("Please enter your username:", );
+            if (username == null || username == "") {
+                username = '';
+            }   
+            socket.emit('set username', username);
+        }
+
+        // Connect to the Socket.IO server (defaults to the server that served this page)
+        const socket = io();
+
+        // Get references to the HTML elements
+        const form = document.getElementById('form');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+        const typingText = document.getElementById('typingText');
+        
+        var typingUsers = new Set(); //Set of other users
+        var typingTimer;
+        var typing = false;
+
+        // --- Sending Messages ---
+        // Add an event listener for when the form is submitted
+        form.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent the default form submission (page reload)
+            if (input.value) { // Check if the input field is not empty
+                // Emit a 'chat message' event to the server with the input value
+                socket.emit('chat message', input.value);
+                input.value = ''; // Clear the input field
+            }
+        });
+
+        function typingWait(){
+            typing = false;
+            console.log('You stopped typing...');
+            socket.emit('stop typing');
+        }
+
+        input.addEventListener('input', function(event) {
+            // Emit a 'typing' event to the server with the input value
+            if (!typing){
+                typing = true;
+
+                socket.emit('typing');  
+                console.log('You\'re typing...');
+
+                typingTimer = setTimeout(typingWait, 7000);//7s wait for typing to be false
+            } else {
+                if (input.value === ''){
+                    typingWait();
+                } else {
+                    clearTimeout(typingTimer);
+                    typingTimer = setTimeout(typingWait, 7000); //rests timer to 7sec
+                }
+            }
+
+        });
+
+        // --- Receiving Messages ---
+        // Add an event listener for 'chat message' events coming FROM the server
+        socket.on('chat message', function(msg) {
+            const item = document.createElement('li'); // Create a new list item element
+            item.textContent = msg; // Set its text content to the received message
+            messages.appendChild(item); // Add the list item to the messages list
+            window.scrollTo(0, document.body.scrollHeight); // Scroll to the bottom
+        });
+
+        function displayTyping(){
+            typingUsersArr = Array.from(typingUsers);
+
+            if (typingUsersArr.length == 1) {
+                typingText.textContent = `${typingUsersArr[0]} is typing...`;
+            } else if (typingUsersArr.length == 2){
+                typingText.textContent = `${typingUsersArr[0]} and ${typingUsersArr[1]} are typing...`;
+            } else if (typingUsersArr.length > 2){
+                typingText.textContent = `${typingUsersArr[0]}, ${typingUsersArr[1]}, and others are typing...`;
+            } else {
+                typingText.textContent = '';
+            }
+        }
+
+        socket.on('user typing', (userId) => {
+            typingUsers.add(userId);
+            displayTyping();
+        });
+
+        socket.on('user stopped typing', (userId) => {
+            typingUsers.delete(userId);
+            displayTyping();
+        });
+
+        // --- Optional: Listen for connect/disconnect events on client ---
+        socket.on('connect', () => {
+            console.log('✅ Connected to server:', socket.id);
+            setUsername();
+        });
+
+        socket.on('joinMessage', (msg) =>{
+            socket.emit('chat message', msg);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Disconnected from server');
+        });
+
+    </script>
+</body>
+</html>
