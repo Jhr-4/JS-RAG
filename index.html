@@ -6,13 +6,51 @@
     <style>
         body {
             margin: 0;
-            padding-bottom: 3rem; 
             font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            height: 100vh;
+        }
+
+        #onlineMembersArea{
+            text-align: center;
+            border: 1px solid #121212;
+            position: absolute;
+            left: 0;
+            margin-left:.5em;
+            padding: 1em;
+            width: 14%;
+            max-height: 40%;
+            overflow-wrap: break-word;
+
+            & h1 {
+                font-size: medium;
+                margin-top: 0;
+                text-align: center;
+            }
+
+            & ul {
+                list-style: none;
+                margin: 0; padding: 0; 
+                overflow-y: auto;
+            }
+        }
+
+        #chatArea{
+            width: 60%;
+            height: 75%;
+            background-color: ghostwhite;
+            border: 1px solid #121212;
+            border-radius: 1em;
+            overflow-x: auto;
+            overflow-wrap: break-word;
+            display: flex;
+            flex-direction: column;
         }
 
         #messageArea{
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
             display: flex;
             flex-direction: column;
         }
@@ -24,7 +62,7 @@
             bottom: 0; left: 0; right: 0;*/
             display: flex; 
             height: 3rem; 
-            margin: 0 1rem;
+            margin: .5rem 1rem 0 1rem;
             border-radius: .5rem;
             box-sizing: border-box; 
             backdrop-filter: blur(10px); }
@@ -52,32 +90,43 @@
             font-size: .8rem;
             color: #333;
             margin: 0;
-            padding: 0 .5rem 0.3rem 1.5rem; 
+            padding: .1rem .5rem 0.1rem 1.5rem; 
             height: 1rem;
-            background: #fff;
         }
 
         #messages { 
             list-style-type: none;
-            margin: 0 1rem; padding: 0; }
+            margin: 0; padding: 0; 
+            flex-grow: 1;
+            overflow-y: auto; }
         #messages > li { 
             padding: 0.5rem 1rem; }
         #messages > li:nth-child(odd) {
-            background: #efefef; }
+            background: #c4c4c4; }
 
     </style>
 </head>
 <body>
 
-    <ul id="messages"></ul>
-    
-    <div id="messageArea">
-        <form id="form" action="">
-            <input id="input" autocomplete="off" placeholder="Message"/>
-            <button>Send</button>
-        </form>
+    <div id="onlineMembersArea">
+        <h1>Connected List</h1>
+        <hr/>
+        <ul id="connectedUsers">
 
-        <p id="typingText"></p>
+        </ul>
+    </div>
+
+    <div id="chatArea">
+        <ul id="messages"></ul>
+        
+        <div id="messageArea">
+            <form id="form" action="">
+                <input id="input" autocomplete="off" placeholder="Message"/>
+                <button>Send</button>
+            </form>
+
+            <p id="typingText"></p>
+        </div>
     </div>
 
     <!-- Include the Socket.IO client library -->
@@ -85,13 +134,6 @@
 
 
     <script>
-        function setUsername(){
-            let username = prompt("Please enter your username:", );
-            if (username == null || username == "") {
-                username = '';
-            }   
-            socket.emit('set username', username);
-        }
 
         // Connect to the Socket.IO server (defaults to the server that served this page)
         const socket = io();
@@ -101,11 +143,49 @@
         const input = document.getElementById('input');
         const messages = document.getElementById('messages');
         const typingText = document.getElementById('typingText');
-        
-        var typingUsers = new Set(); //Set of other users
-        var typingTimer;
-        var typing = false;
+        const connectionsText = document.getElementById('connectedUsers');
 
+        let typingUsers = new Set(); //Set of other users
+        let typingTimer;
+        let typing = false;
+
+        //User Functions
+        function setUsername(id){
+            let username = prompt("Please enter your username:", );
+            const regex = /^[a-zA-Z0-9_-]+$/;
+            if (!regex.test(username) || username == null || username == "" || username.length < 3 || username.length > 20 ) {
+                username = id;
+                alert(`Invalid Username. Username Set To: ${username}`);
+            }   
+            socket.emit('set username', username);
+        }
+
+        function updateConnectUser(userArr){
+            connectionsText.innerHTML = '';
+            if (userArr != null){
+                userArr.forEach(user => {
+                    let item = document.createElement('li'); // Create a new list item element
+                    item.textContent = `🟢${user}`; // Set its text content to the received message
+                    connectionsText.appendChild(item); // Add the list item to the messages list
+                    window.scrollTo(0, document.body.scrollHeight); // Scroll to the bottom 
+                });   
+            }
+        }
+
+        function displayTyping(){
+            typingUsersArr = Array.from(typingUsers);
+
+            if (typingUsersArr.length == 1) {
+                typingText.textContent = `${typingUsersArr[0]} is typing...`;
+            } else if (typingUsersArr.length == 2){
+                typingText.textContent = `${typingUsersArr[0]} and ${typingUsersArr[1]} are typing...`;
+            } else if (typingUsersArr.length > 2){
+                typingText.textContent = `${typingUsersArr[0]}, ${typingUsersArr[1]}, and others are typing...`;
+            } else {//empty
+                typingText.textContent = '';
+            }
+        }
+        
         // --- Sending Messages ---
         // Add an event listener for when the form is submitted
         form.addEventListener('submit', function(event) {
@@ -140,7 +220,6 @@
                     typingTimer = setTimeout(typingWait, 7000); //rests timer to 7sec
                 }
             }
-
         });
 
         // --- Receiving Messages ---
@@ -151,20 +230,6 @@
             messages.appendChild(item); // Add the list item to the messages list
             window.scrollTo(0, document.body.scrollHeight); // Scroll to the bottom
         });
-
-        function displayTyping(){
-            typingUsersArr = Array.from(typingUsers);
-
-            if (typingUsersArr.length == 1) {
-                typingText.textContent = `${typingUsersArr[0]} is typing...`;
-            } else if (typingUsersArr.length == 2){
-                typingText.textContent = `${typingUsersArr[0]} and ${typingUsersArr[1]} are typing...`;
-            } else if (typingUsersArr.length > 2){
-                typingText.textContent = `${typingUsersArr[0]}, ${typingUsersArr[1]}, and others are typing...`;
-            } else {
-                typingText.textContent = '';
-            }
-        }
 
         socket.on('user typing', (userId) => {
             typingUsers.add(userId);
@@ -177,14 +242,21 @@
         });
 
         // --- Optional: Listen for connect/disconnect events on client ---
-        socket.on('connect', () => {
+        socket.on('connect', (usersSet) => { //client that connected
             console.log('✅ Connected to server:', socket.id);
-            setUsername();
+            setUsername(socket.id);
+            connectedUsers = usersSet;
+            updateConnectUser()
         });
 
         socket.on('joinMessage', (msg) =>{
             socket.emit('chat message', msg);
         });
+
+        socket.on('update connections', (userArr) => {
+            console.log('update connected users...');
+            updateConnectUser(userArr);
+        })
 
         socket.on('disconnect', () => {
             console.log('❌ Disconnected from server');

@@ -14,9 +14,9 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-//Set of users
-var typingUsers = new Set();
-var typingTimer;
+let typingUsers = new Set();
+let connectedUsers = new Set();
+let typingTimer;
 
 // --- Socket.IO Logic ---
 io.on('connection', (socket) => {
@@ -24,16 +24,22 @@ io.on('connection', (socket) => {
     console.log('✅ A user connected:', socket.id); // Log when a new client connects
 
     socket.on('set username', (username) => { // Mark inner callback as async too for await
-        //filter/check username first just incase
+
+        //filter/check username first just incase client side validation fails
         const regex = /^[a-zA-Z0-9_-]+$/;
         if (!regex.test(username) || username.length < 3 || username.length > 20 || typeof username !== 'string'){
             console.log('Invalid Name');
-            userID = socket.id; //should potentially be a alert in the future...
+            userID = socket.id;
         } else {
             userID = username;
             console.log(`👤 User ${socket.id} set username to: ${username}`);
         }
+
+        connectedUsers.add(userID);
+
         socket.emit('joinMessage', `✅ ${userID} Has Connected to Chat!`);
+        let connectedUsersArr = Array.from(connectedUsers);
+        io.emit('update connections', connectedUsersArr);//Emit To Everyone
     });
         
     // Listen for 'chat message' events from a client
@@ -48,7 +54,7 @@ io.on('connection', (socket) => {
 
         //time logic is done on server side too, to ensure no client side scripting...
         if (!typingUsers.has(userID)){
-            console.log(`⌨ User ${userID} is typing.`);
+            console.log(`⌨ User ${userID} is typing...`);
             typingUsers.add(userID);
             socket.broadcast.emit('user typing', userID);//emmited to every other user
 
@@ -67,7 +73,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('stop typing', () => {
-        console.log(`🛑 User ${userID} stopped typing.`);
+        console.log(`🛑 User ${userID} stopped typing...`);
 
         typingUsers.delete(userID);
         socket.broadcast.emit('user stopped typing', userID);//emmited to every other user
@@ -77,6 +83,9 @@ io.on('connection', (socket) => {
     // Listen for 'disconnect' events
     socket.on('disconnect', () => {
         console.log('❌ User disconnected:', userID);
+        connectedUsers.delete(userID);
+        let connectedUsersArr = Array.from(connectedUsers);
+        io.emit('update connections', connectedUsersArr);
         if (typingUsers.has(userID)){
             socket.broadcast.emit('user stopped typing', userID);
         }
